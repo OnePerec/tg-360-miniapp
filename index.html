@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+  <title>360° Мини-апп</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; }
+    #pano { width: 100%; height: 100%; }
+    .toolbar {
+      position: fixed; top: 10px; left: 10px; right: 10px; display: flex;
+      gap: 8px; z-index: 10; align-items: center; justify-content: space-between;
+      padding: 6px 10px; border-radius: 12px; backdrop-filter: blur(6px);
+      background: rgba(0,0,0,.35); color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .toolbar .title { font-weight: 600; font-size: 14px; }
+    .toolbar .btns { display: flex; gap: 8px; }
+    .btn {
+      border: none; padding: 8px 12px; border-radius: 10px; cursor: pointer;
+      background: rgba(255,255,255,.9);
+    }
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://unpkg.com/marzipano@0.10.3/dist/marzipano.js"></script>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="title">📷 360° Просмотр</div>
+    <div class="btns">
+      <button class="btn" id="zoomIn">+</button>
+      <button class="btn" id="zoomOut">−</button>
+      <button class="btn" id="reset">Reset</button>
+    </div>
+  </div>
+  <div id="pano"></div>
+
+  <script src="data.js"></script>
+  <script>
+    const viewer = new Marzipano.Viewer(document.getElementById('pano'));
+    const sceneData = window.DATA?.scene;
+
+    if (!sceneData || !sceneData.url) {
+      document.getElementById("pano").innerHTML = "<p style='color:white;text-align:center;margin-top:40vh'>Добавь свой файл в папку panos/ и укажи путь в data.js</p>";
+    } else {
+      const source = Marzipano.ImageUrlSource.fromString(sceneData.url);
+      const geometry = new Marzipano.EquirectGeometry([{ width: sceneData.width || 8000 }]);
+      const limiter = Marzipano.RectilinearView.limit.traditional(1024, Math.PI/2);
+      const view = new Marzipano.RectilinearView(
+        { yaw: sceneData.yaw||0, pitch: sceneData.pitch||0, fov: sceneData.fov||1.2 },
+        limiter
+      );
+      const scene = viewer.createScene({ source, geometry, view, pinFirstLevel: true });
+      scene.switchTo();
+
+      document.getElementById('zoomIn').onclick = () => view.setFov(view.fov() * 0.9);
+      document.getElementById('zoomOut').onclick = () => view.setFov(view.fov() / 0.9);
+      document.getElementById('reset').onclick = () => view.setParameters({ yaw: 0, pitch: 0, fov: 1.2 });
+    }
+  </script>
+</body>
+</html>
