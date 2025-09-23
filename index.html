@@ -42,13 +42,7 @@
       tg.expand();
       const tp = tg.themeParams || {};
       if (tp.bg_color) document.body.style.background = tp.bg_color;
-      tg.MainButton.setText("Открыть панораму");
-      tg.MainButton.onClick(() => {
-        try {
-          tg.sendData(JSON.stringify({ event: "open_pano" }));
-        } catch (e) {}
-      });
-      tg.MainButton.show();
+      tg.MainButton.hide();
     }
 
     const viewer = new Marzipano.Viewer(document.getElementById('pano'));
