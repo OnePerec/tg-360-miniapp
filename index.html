@@ -2,43 +2,28 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <title>360° Мини-апп</title>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
+    html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000}
+    #pano{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+    .toolbar{
+      position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;z-index:10;
+      align-items:center;justify-content:space-between;padding:6px 10px;border-radius:12px;
+      backdrop-filter:blur(6px);background:rgba(0,0,0,.35);color:#fff;
+      font:14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
     }
-    #pano {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      touch-action: none;
-    }
-    .toolbar {
-      position: fixed; top: 10px; left: 10px; right: 10px; display: flex;
-      gap: 8px; z-index: 10; align-items: center; justify-content: space-between;
-      padding: 6px 10px; border-radius: 12px; backdrop-filter: blur(6px);
-      background: rgba(0,0,0,.35); color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    }
-    .toolbar .title { font-weight: 600; font-size: 14px; }
-    .toolbar .btns { display: flex; gap: 8px; }
-    .btn {
-      border: none; padding: 8px 12px; border-radius: 10px; cursor: pointer;
-      background: rgba(255,255,255,.9);
-    }
+    .btn{border:0;padding:8px 12px;border-radius:10px;cursor:pointer;background:rgba(255,255,255,.9)}
   </style>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Локальная библиотека Marzipano -->
   <script src="libs/marzipano.min.js"></script>
+  <!-- Telegram WebApp SDK (без MainButton) -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div class="toolbar">
-    <div class="title">📷 360° Просмотр</div>
-    <div class="btns">
+    <div>📷 360° Просмотр</div>
+    <div>
       <button class="btn" id="zoomIn">+</button>
       <button class="btn" id="zoomOut">−</button>
       <button class="btn" id="reset">Reset</button>
@@ -46,100 +31,77 @@
   </div>
   <div id="pano"></div>
 
-  <script src="data.js"></script>
-  <script>
-    const setBackground = (color) => {
-      if (color) {
-        document.body.style.background = color;
-      }
-    };
+  <!-- Конфиг тура (кэш-брейкер обязателен!) -->
+  <script src="data.js?v=5"></script>
 
-    const tg = window.Telegram?.WebApp || null;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      const tp = tg.themeParams || {};
-      setBackground(tp.bg_color || '#000');
-      tg.MainButton.hide();
-    } else {
-      setBackground('#000');
-      console.log('режим браузера');
+  <script>
+    // Mini App и тема (без MainButton)
+    (function initTG(){
+      const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      if (tg){ tg.ready(); tg.expand(); const tp=tg.themeParams||{}; if(tp.bg_color) document.body.style.background=tp.bg_color; }
+      else { console.log("Browser mode (Telegram WebApp SDK нет)"); }
+    })();
+
+    // Сообщение поверх экрана
+    function overlay(html){
+      const d=document.createElement('div');
+      d.style.cssText='position:fixed;inset:0;display:grid;place-items:center;color:#fff;font:16px system-ui;background:rgba(0,0,0,.4);z-index:20';
+      d.innerHTML=html; document.body.appendChild(d); return d;
     }
 
-    const panoEl = document.getElementById('pano');
-    if (!panoEl) {
-      console.warn('pano element not found');
-    } else {
-      let touchStart = null;
+    // Инициализация панорамы
+    (function initPano(){
+      if(!window.DATA || !window.DATA.scene || !window.DATA.scene.url){
+        overlay('Укажи панораму в <code>data.js</code>'); return;
+      }
+      const sceneData = window.DATA.scene;
 
-      const resetTouch = () => {
-        touchStart = null;
-      };
+      // Пробная загрузка, чтобы взять реальную ширину текстуры
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const realW = img.naturalWidth || sceneData.width || 8000;
 
-      panoEl.addEventListener('touchstart', (event) => {
-        if (event.touches.length === 1) {
-          const touch = event.touches[0];
-          touchStart = { x: touch.clientX, y: touch.clientY };
-        } else {
-          touchStart = null;
-        }
-      }, { passive: false });
+        const viewer = new Marzipano.Viewer(document.getElementById('pano'));
+        const source = Marzipano.ImageUrlSource.fromString(sceneData.url + (sceneData.url.includes('?')?'&':'?') + 't=' + Date.now());
+        const geometry = new Marzipano.EquirectGeometry([{ width: realW }]);
 
-      panoEl.addEventListener('touchmove', (event) => {
-        if (!touchStart || event.touches.length !== 1) {
-          return;
-        }
-
-        const touch = event.touches[0];
-        const deltaX = touch.clientX - touchStart.x;
-        const deltaY = touch.clientY - touchStart.y;
-        if (deltaY > 2 && Math.abs(deltaY) >= Math.abs(deltaX)) {
-          event.preventDefault();
-        }
-      }, { passive: false });
-
-      panoEl.addEventListener('touchend', resetTouch, { passive: true });
-      panoEl.addEventListener('touchcancel', resetTouch, { passive: true });
-
-      const viewer = new Marzipano.Viewer(panoEl);
-      const sceneData = window.DATA?.scene;
-
-      if (!sceneData || !sceneData.url) {
-        panoEl.innerHTML = "<p style='color:white;text-align:center;margin-top:40vh'>Добавь свой файл в папку panos/ и укажи путь в data.js</p>";
-      } else {
-        const source = Marzipano.ImageUrlSource.fromString(sceneData.url);
-        const geometry = new Marzipano.EquirectGeometry([{ width: sceneData.width || 8000 }]);
-        const minFov = 0.25;
-        const maxFov = 1.5;
-        const clampFov = (value) => Math.min(maxFov, Math.max(minFov, value));
+        const minFov = 0.25; // ~14°
+        const maxFov = 1.5;  // ~86°
         const limiter = Marzipano.RectilinearView.limit.zoom(minFov, maxFov);
         const view = new Marzipano.RectilinearView(
-          { yaw: sceneData.yaw||0, pitch: sceneData.pitch||0, fov: clampFov(sceneData.fov||1.2) },
+          { yaw: sceneData.yaw||0, pitch: sceneData.pitch||0, fov: sceneData.fov||1.2 },
           limiter
         );
-        const scene = viewer.createScene({ source, geometry, view, pinFirstLevel: true });
+
+        const scene = viewer.createScene({ source, geometry, view, pinFirstLevel:true });
         scene.switchTo();
 
-        document.getElementById('zoomIn').onclick = () => view.setFov(clampFov(view.fov() * 0.9));
-        document.getElementById('zoomOut').onclick = () => view.setFov(clampFov(view.fov() / 0.9));
-        document.getElementById('reset').onclick = () => view.setParameters({ yaw: 0, pitch: 0, fov: clampFov(1.2) });
-
+        // Включаем жесты/колесо
         const controls = viewer.controls();
-        if (controls && typeof controls.registerMethod === 'function') {
-          const ensureMethod = (name, handlerFactory) => {
-            const existing = typeof controls.method === 'function' ? controls.method(name) : null;
-            if (!existing) {
-              controls.registerMethod(name, handlerFactory(), true);
-            }
-          };
+        controls.registerMethod('mouseViewDrag', new Marzipano.MouseViewDragHandler(view), true);
+        controls.registerMethod('touchViewDrag', new Marzipano.TouchViewDragHandler(view), true);
+        controls.registerMethod('scrollZoom',    new Marzipano.ScrollZoomHandler(view), true);
+        controls.registerMethod('pinchZoom',     new Marzipano.PinchZoomHandler(view), true);
 
-          ensureMethod('mouseViewDrag', () => new Marzipano.MouseViewDragHandler(view));
-          ensureMethod('touchViewDrag', () => new Marzipano.TouchViewDragHandler(view));
-          ensureMethod('scrollZoom',    () => new Marzipano.ScrollZoomHandler(view));
-          ensureMethod('pinchZoom',     () => new Marzipano.PinchZoomHandler(view));
-        }
-      }
-    }
+        // Кнопки зума
+        const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+        document.getElementById('zoomIn').onclick  = () => view.setFov( clamp(view.fov()*0.9, minFov, maxFov) );
+        document.getElementById('zoomOut').onclick = () => view.setFov( clamp(view.fov()/0.9, minFov, maxFov) );
+        document.getElementById('reset').onclick   = () => view.setParameters({ yaw:0, pitch:0, fov:1.2 });
+
+        // iOS: блокируем только одиночный вертикальный свайп (не мешаем пинчу)
+        (function guardIOS(){
+          const el = document.getElementById('pano');
+          let dragging=false, startY=0;
+          el.addEventListener('touchstart',(e)=>{ if(e.touches.length===1){dragging=true; startY=e.touches[0].clientY;} else dragging=false; }, {passive:false});
+          el.addEventListener('touchmove',(e)=>{ if(e.touches.length>=2) return; if(dragging && e.touches[0]){ const dy=e.touches[0].clientY-startY; if(Math.abs(dy)>2) e.preventDefault(); } }, {passive:false});
+          el.addEventListener('touchend',()=>{ dragging=false; }, {passive:false});
+        })();
+      };
+      img.onerror = () => overlay('Не удалось загрузить: <b>'+sceneData.url+'</b>');
+      img.src = sceneData.url + (sceneData.url.includes('?')?'&':'?') + 't=' + Date.now();
+    })();
   </script>
 </body>
 </html>
