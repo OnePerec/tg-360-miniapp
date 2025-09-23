@@ -6,17 +6,17 @@
   <title>360° Мини-апп</title>
   <style>
     html, body {
-      height: 100%;
       margin: 0;
-      background: #000;
+      padding: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      overscroll-behavior: none;
-      -webkit-overflow-scrolling: auto;
-      touch-action: none;
     }
     #pano {
       position: fixed;
       inset: 0;
+      width: 100%;
+      height: 100%;
       touch-action: none;
     }
     .toolbar {
@@ -48,65 +48,97 @@
 
   <script src="data.js"></script>
   <script>
+    const setBackground = (color) => {
+      if (color) {
+        document.body.style.background = color;
+      }
+    };
+
     const tg = window.Telegram?.WebApp || null;
     if (tg) {
       tg.ready();
       tg.expand();
       const tp = tg.themeParams || {};
-      if (tp.bg_color) document.body.style.background = tp.bg_color;
+      setBackground(tp.bg_color || '#000');
       tg.MainButton.hide();
+    } else {
+      setBackground('#000');
+      console.log('режим браузера');
     }
 
     const panoEl = document.getElementById('pano');
-    if (panoEl) {
-      let touchStartY = null;
+    if (!panoEl) {
+      console.warn('pano element not found');
+    } else {
+      let touchStart = null;
 
       const resetTouch = () => {
-        touchStartY = null;
+        touchStart = null;
       };
 
       panoEl.addEventListener('touchstart', (event) => {
         if (event.touches.length === 1) {
-          touchStartY = event.touches[0].clientY;
+          const touch = event.touches[0];
+          touchStart = { x: touch.clientX, y: touch.clientY };
         } else {
-          touchStartY = null;
+          touchStart = null;
         }
       }, { passive: false });
 
       panoEl.addEventListener('touchmove', (event) => {
-        if (touchStartY === null || event.touches.length !== 1) {
+        if (!touchStart || event.touches.length !== 1) {
           return;
         }
 
-        const currentY = event.touches[0].clientY;
-        if (Math.abs(currentY - touchStartY) > 2) {
+        const touch = event.touches[0];
+        const deltaX = touch.clientX - touchStart.x;
+        const deltaY = touch.clientY - touchStart.y;
+        if (deltaY > 2 && Math.abs(deltaY) >= Math.abs(deltaX)) {
           event.preventDefault();
         }
       }, { passive: false });
 
       panoEl.addEventListener('touchend', resetTouch, { passive: true });
       panoEl.addEventListener('touchcancel', resetTouch, { passive: true });
-    }
 
-    const viewer = new Marzipano.Viewer(document.getElementById('pano'));
-    const sceneData = window.DATA?.scene;
+      const viewer = new Marzipano.Viewer(panoEl);
+      const sceneData = window.DATA?.scene;
 
-    if (!sceneData || !sceneData.url) {
-      document.getElementById("pano").innerHTML = "<p style='color:white;text-align:center;margin-top:40vh'>Добавь свой файл в папку panos/ и укажи путь в data.js</p>";
-    } else {
-      const source = Marzipano.ImageUrlSource.fromString(sceneData.url);
-      const geometry = new Marzipano.EquirectGeometry([{ width: sceneData.width || 8000 }]);
-      const limiter = Marzipano.RectilinearView.limit.traditional(1024, Math.PI/2);
-      const view = new Marzipano.RectilinearView(
-        { yaw: sceneData.yaw||0, pitch: sceneData.pitch||0, fov: sceneData.fov||1.2 },
-        limiter
-      );
-      const scene = viewer.createScene({ source, geometry, view, pinFirstLevel: true });
-      scene.switchTo();
+      if (!sceneData || !sceneData.url) {
+        panoEl.innerHTML = "<p style='color:white;text-align:center;margin-top:40vh'>Добавь свой файл в папку panos/ и укажи путь в data.js</p>";
+      } else {
+        const source = Marzipano.ImageUrlSource.fromString(sceneData.url);
+        const geometry = new Marzipano.EquirectGeometry([{ width: sceneData.width || 8000 }]);
+        const minFov = 0.25;
+        const maxFov = 1.5;
+        const clampFov = (value) => Math.min(maxFov, Math.max(minFov, value));
+        const limiter = Marzipano.RectilinearView.limit.zoom(minFov, maxFov);
+        const view = new Marzipano.RectilinearView(
+          { yaw: sceneData.yaw||0, pitch: sceneData.pitch||0, fov: clampFov(sceneData.fov||1.2) },
+          limiter
+        );
+        const scene = viewer.createScene({ source, geometry, view, pinFirstLevel: true });
+        scene.switchTo();
 
-      document.getElementById('zoomIn').onclick = () => view.setFov(view.fov() * 0.9);
-      document.getElementById('zoomOut').onclick = () => view.setFov(view.fov() / 0.9);
-      document.getElementById('reset').onclick = () => view.setParameters({ yaw: 0, pitch: 0, fov: 1.2 });
+        document.getElementById('zoomIn').onclick = () => view.setFov(clampFov(view.fov() * 0.9));
+        document.getElementById('zoomOut').onclick = () => view.setFov(clampFov(view.fov() / 0.9));
+        document.getElementById('reset').onclick = () => view.setParameters({ yaw: 0, pitch: 0, fov: clampFov(1.2) });
+
+        const controls = viewer.controls();
+        if (controls && typeof controls.registerMethod === 'function') {
+          const ensureMethod = (name, handlerFactory) => {
+            const existing = typeof controls.method === 'function' ? controls.method(name) : null;
+            if (!existing) {
+              controls.registerMethod(name, handlerFactory(), true);
+            }
+          };
+
+          ensureMethod('mouseViewDrag', () => new Marzipano.MouseViewDragHandler(view));
+          ensureMethod('touchViewDrag', () => new Marzipano.TouchViewDragHandler(view));
+          ensureMethod('scrollZoom',    () => new Marzipano.ScrollZoomHandler(view));
+          ensureMethod('pinchZoom',     () => new Marzipano.PinchZoomHandler(view));
+        }
+      }
     }
   </script>
 </body>
