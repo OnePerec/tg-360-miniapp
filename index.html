@@ -49,6 +49,23 @@
       d.innerHTML=html; document.body.appendChild(d); return d;
     }
 
+    function withCacheBuster(url){
+      let parsed;
+      try {
+        parsed = new URL(url, window.location.href);
+      } catch (e) {
+        return url;
+      }
+      if (parsed.origin !== window.location.origin) return url;
+      parsed.searchParams.set('_t', Date.now());
+      if (/^https?:\/\//i.test(url) || url.startsWith('//')) {
+        return parsed.toString();
+      }
+      const rebuilt = parsed.pathname + parsed.search + parsed.hash;
+      if (url.startsWith('/')) return rebuilt;
+      return rebuilt.startsWith('/') ? rebuilt.slice(1) : rebuilt;
+    }
+
     // Инициализация панорамы
     (function initPano(){
       if(!window.DATA || !window.DATA.scene || !window.DATA.scene.url){
@@ -63,7 +80,7 @@
         const realW = img.naturalWidth || sceneData.width || 8000;
 
         const viewer = new Marzipano.Viewer(document.getElementById('pano'));
-        const source = Marzipano.ImageUrlSource.fromString(sceneData.url + (sceneData.url.includes('?')?'&':'?') + 't=' + Date.now());
+        const source = Marzipano.ImageUrlSource.fromString(withCacheBuster(sceneData.url));
         const geometry = new Marzipano.EquirectGeometry([{ width: realW }]);
 
         const minFov = 0.25; // ~14°
@@ -100,7 +117,7 @@
         })();
       };
       img.onerror = () => overlay('Не удалось загрузить: <b>'+sceneData.url+'</b>');
-      img.src = sceneData.url + (sceneData.url.includes('?')?'&':'?') + 't=' + Date.now();
+      img.src = withCacheBuster(sceneData.url);
     })();
   </script>
 </body>
