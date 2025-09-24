@@ -2,7 +2,7 @@
 window.DATA = {
   scene: {
     title: "Тестовая сцена",
-    url: "https://pannellum.org/images/alma.jpg", // ← замени на свой файл, например "panos/school_entrance.webp"
+    url: "panos/alma.jpg"//"https://pannellum.org/images/alma.jpg", // ← замени на свой файл, например "panos/school_entrance.webp"
     width: 8000,
     yaw: 0, pitch: 0, fov: 1.2
   }
